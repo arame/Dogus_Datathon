@@ -33,7 +33,8 @@ class Data:
         self.df_customers[Hyper.customer_columns_numeric] = self.df_customers[Hyper.customer_columns_numeric].apply(pd.to_numeric)  
         self.df_sales_file = self.read_file(Hyper.sales_file, Hyper.sales_columns, "sales")
         self.df_customer_history = self.read_file(Hyper.customer_history_file, Hyper.customer_history_columns, "customer history")  
-        self.df_customer_sales = self.read_file(Hyper.customer_sales_file, Hyper.customer_sales_columns, "customer sales") 
+        self.df_customer_sales = self.read_file(Hyper.customer_sales_file, Hyper.customer_sales_columns, "customer sales")
+        self.df_customer_sales = self.df_customer_sales[Hyper.customer_sales_reorder_columns] 
         self.df_vehicles = self.read_file(Hyper.vehicle_file, Hyper.vehicle_columns, "vehicles")  
         self.df_vehicle_maintenance = self.read_file(Hyper.vehicle_maintenance_file, Hyper.vehicle_maintenance_columns, "vehicle maintenace")     
         if Hyper.IsStartAgain:
