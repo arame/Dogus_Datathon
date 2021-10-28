@@ -6,3 +6,6 @@ node_modules
 *.csv
 *.zip
 *.db
+*.jpg
+*.gif
+*.png
