@@ -105,8 +105,8 @@ class Data:
                                 sales_file_id integer NOT NULL,
                                 sales_file_create_date timestamp NOT NULL,
                                 status integer NOT NULL,
-                                brand_code text NOT NULL,
-                                top_model_code integer NULL,
+                                req_brand_code text NOT NULL,
+                                req_top_model_code integer NULL,
                                 FOREIGN KEY(customer_id) REFERENCES customer(customer_id)
                             ); """
 
