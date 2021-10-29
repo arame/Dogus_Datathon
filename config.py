@@ -11,7 +11,7 @@ class Hyper:
     customer_reorder_columns = ["customer_id", "base_customer_id", "gender", "gender_id", "marital_status", "marital_status_id", "birth_year", "city", "occupation"]
     customer_columns_numeric = ["customer_id", "base_customer_id", "gender_id", "marital_status_id", "birth_year"]
     sales_file = "./files/FINAL_SALES_FILE_DATATHON.csv"
-    sales_columns = ["customer_id", "sales_file_id", "sales_file_create_date", "status", "brand_code", "top_model_code"]
+    sales_columns = ["customer_id", "sales_file_id", "sales_file_create_date", "status", "req_brand_code", "req_top_model_code"]
     customer_history_file = "./files/FINAL_CUSTOMER_RELATED_TABLE_FOR_DATATHON.csv"
     customer_history_columns = ["base_customer_id", "vehicle_id", "start_date", "end_date", "status_id", "status_explanation"]
     customer_sales_file = "./files/FINAL_SIFIR_ARAC_ALANLAR_DATATHON.csv"

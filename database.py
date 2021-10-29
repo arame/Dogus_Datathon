@@ -11,7 +11,6 @@ class Data:
     display_customer_table = "select * from customers;"
         
     def __init__(self) -> None:
-        
         self.db = Hyper.db
         self.create_connection()
         Helper.printline("Database opened successfully")  
