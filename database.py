@@ -112,7 +112,7 @@ class Data:
 
         self.create_table(sql_script)
         sql_script = f"""INSERT INTO {self.table_name}
-                          (customer_id, sales_file_id, sales_file_create_date, status, brand_code, top_model_code) 
+                          (customer_id, sales_file_id, sales_file_create_date, status, req_brand_code, req_top_model_code) 
                           VALUES (?, ?, ?, ?, ?, ?);"""
         self.load_table(self.df_sales_file, sql_script)
         self.display_table()
