@@ -8,6 +8,9 @@ class Data:
     TABLE_PARAMETER = "{TABLE_PARAMETER}"
     DROP_TABLE_SQL = f"DROP TABLE {TABLE_PARAMETER};"
     GET_TABLES_SQL = "SELECT name FROM sqlite_master WHERE type='table';"
+    VIEW_PARAMETER = "{VIEW_PARAMETER}"
+    DROP_VIEW_SQL = f"DROP VIEW {VIEW_PARAMETER};"
+    GET_VIEWS_SQL = "SELECT name FROM sqlite_master WHERE type='view';"
     display_customer_table = "select * from customers;"
         
     def __init__(self) -> None:
@@ -37,9 +40,10 @@ class Data:
         self.df_vehicles = self.read_file(Hyper.vehicle_file, Hyper.vehicle_columns, "vehicles")  
         self.df_vehicle_maintenance = self.read_file(Hyper.vehicle_maintenance_file, Hyper.vehicle_maintenance_columns, "vehicle maintenace")     
         if Hyper.IsStartAgain:
-            self.delete_all_tables()
+            self.delete_all_tables_and_views()
                 
         self.create_all_tables()
+        #self.create_all_views()
 
     def read_file(self, file, columns, file_name):
         try:
@@ -51,9 +55,13 @@ class Data:
             sys.exit(f"Error with reading the file {file_name}: {e}")
            
           
-    def delete_all_tables(self):
+    def delete_all_tables_and_views(self):
         tables = self.get_tables()
         self.delete_tables(tables)
+        Helper.printline("Deleted all tables")
+        views = self.get_views()
+        self.delete_views(views)
+        Helper.printline("Deleted all views")
     
     def get_tables(self):
         c = self.con.cursor()
@@ -68,6 +76,20 @@ class Data:
             sql = Data.DROP_TABLE_SQL.replace(Data.TABLE_PARAMETER, table)
             c.execute(sql)
         c.close()
+        
+    def get_views(self):
+        c = self.con.cursor()
+        c.execute(Data.GET_VIEWS_SQL)
+        views = c.fetchall()
+        c.close()
+        return views
+
+    def delete_views(self, views):
+        c = self.con.cursor()
+        for view, in views:
+            sql = Data.DROP_VIEW_SQL.replace(Data.VIEW_PARAMETER, view)
+            c.execute(sql)
+        c.close()
     
     def create_all_tables(self):
         self.create_customers_table()
@@ -75,7 +97,8 @@ class Data:
         self.create_customer_history_table()
         self.create_customer_sales_table() 
         self.create_vehicle_table()
-        self.create_vehicle_maintenance_table()     
+        self.create_vehicle_maintenance_orig_table() 
+        self.create_vehicle_maintenance_table()    
 
     def create_customers_table(self):
         self.table_name = "customers"        
@@ -171,8 +194,8 @@ class Data:
         self.load_table(self.df_vehicles, sql_script)
         #self.display_table()
         
-    def create_vehicle_maintenance_table(self):
-        self.table_name = "vehicle_maintenance"
+    def create_vehicle_maintenance_orig_table(self):
+        self.table_name = "vehicle_maintenance_orig"
         sql_script = f""" CREATE TABLE IF NOT EXISTS {self.table_name} (
                                 create_date timestamp NOT NULL,
                                 is_maintenance integer NOT NULL,
@@ -187,7 +210,73 @@ class Data:
                           VALUES (?, ?, ?, ?);"""
         self.load_table(self.df_vehicle_maintenance, sql_script)
         self.display_table()
-                                
+        
+    def create_vehicle_maintenance_table(self):
+        self.table_name = "vehicle_maintenance"
+        sql_script = f""" CREATE TABLE IF NOT EXISTS {self.table_name} (
+                                vehicle_id integer NOT NULL PRIMARY KEY,
+                                first_service timestamp NULL,
+                                last_service timestamp NULL,
+                                total_service integer NOT NULL,
+                                full_amount_service integer NOT NULL,
+                                first_maintenance timestamp NULL,
+                                last_maintenance timestamp NULL,
+                                total_maintenance integer NOT NULL,
+                                full_amount_maintenance integer NOT NULL
+                            ); """
+        
+        self.create_table(sql_script)
+        sql_script = f"""INSERT INTO {self.table_name}
+                            SELECT M.vehicle_id, 
+                            first_service, last_service, IFNULL(total_service, 0) AS total_service, IFNULL(full_amount_service, 0) as full_amount_service, 
+                            first_maintenance, last_maintenance, IFNULL(total_maintenance, 0) as total_service, IFNULL(full_amount_maintenance, 0) as full_amount_maintenance 
+                            FROM
+                            (SELECT vehicle_id,
+                            min(create_date) as first_maintenance,
+                            max(create_date) as last_maintenance,
+                            count(*) as total_maintenance,
+                            sum(total_amount) as full_amount_maintenance
+                            FROM vehicle_maintenance_orig
+                            WHERE is_maintenance = 1
+                            GROUP BY vehicle_id) AS M
+                            LEFT OUTER JOIN 
+                            (SELECT vehicle_id,
+                            min(create_date) as first_service,
+                            max(create_date) as last_service,
+                            count(*) as total_service,
+                            sum(total_amount) as full_amount_service
+                            FROM vehicle_maintenance_orig
+                            WHERE is_maintenance = 0
+                            GROUP BY vehicle_id) AS S
+                            ON M.vehicle_id = S.vehicle_id
+                            UNION
+                            SELECT S.vehicle_id, 
+                            first_service, last_service, IFNULL(total_service, 0) AS total_service, IFNULL(full_amount_service, 0) as full_amount_service, 
+                            first_maintenance, last_maintenance, IFNULL(total_maintenance, 0) as total_service, IFNULL(full_amount_maintenance, 0) as full_amount_maintenance 
+                            FROM
+                            (SELECT vehicle_id,
+                            min(create_date) as first_service,
+                            max(create_date) as last_service,
+                            count(*) as total_service,
+                            sum(total_amount) as full_amount_service
+                            FROM vehicle_maintenance_orig
+                            WHERE is_maintenance = 0
+                            GROUP BY vehicle_id) AS S
+                            LEFT OUTER JOIN 
+                            (SELECT vehicle_id,
+                            min(create_date) as first_maintenance,
+                            max(create_date) as last_maintenance,
+                            count(*) as total_maintenance,
+                            sum(total_amount) as full_amount_maintenance
+                            FROM vehicle_maintenance_orig
+                            WHERE is_maintenance = 1
+                            GROUP BY vehicle_id) AS M
+                            ON M.vehicle_id = S.vehicle_id        
+                          """
+        success_message = f"Script for loading {self.table_name} completed"
+        error_message = f"Error loading {self.table_name}"
+        self.execute_script(sql_script, success_message, error_message)
+        
     def create_table(self, create_table_sql):
         """ create a table from the create_table_sql statement
             :param  create_table_sql : a CREATE TABLE statement
@@ -219,7 +308,73 @@ class Data:
             Helper.printline(f"{self.table_name} table loaded")
         except Exception as e:
             sys.exit(f"Error with inserting {self.table_name}: {e}")
-      
+     
+    def execute_script(self, sql_script, success_message, error_message):
+        try:
+            c = self.con.cursor()
+            c.execute(sql_script)
+            c.close()
+            self.con.commit()
+            Helper.printline(success_message)
+        except Exception as e:
+            sys.exit(f"{error_message}: {e}")
+    
+    ''' def create_all_views(self):
+        self.create_vehicle_mainenance_view() '''
+    '''         
+    def create_vehicle_mainenance_view(self):
+        self.view_name = "vw_vehicle_maintenance"
+        sql_script = f""" CREATE VIEW IF NOT EXISTS {self.view_name} AS
+                            SELECT vm.vehicle_id, 
+                            first_service, last_service, ifnull(total_service, 0) as total_service, 
+                            first_maintenance, last_maintenance, ifnull(total_maintenance, 0) as total_maintenance  
+                            FROM
+                            (SELECT vehicle_id, 
+                            min(create_date) as first_maintenance,
+                            max(create_date) as last_maintenance,
+                            count(*) as total_maintenance
+                            FROM vehicle_maintenance 
+                            WHERE is_maintenance = 1 
+                            GROUP BY vehicle_id) as vm
+                            LEFT OUTER JOIN  
+                            (SELECT vehicle_id, 
+                            min(create_date) as first_service,
+                            max(create_date) as last_service,
+                            count(*) as total_service
+                            FROM vehicle_maintenance 
+                            WHERE is_maintenance = 0 
+                            GROUP BY vehicle_id) as vs
+                            ON vm.vehicle_id = vs.vehicle_id
+                            UNION  
+                            SELECT vs.vehicle_id, 
+                            first_service, last_service, ifnull(total_service, 0) as total_service, 
+                            first_maintenance, last_maintenance, ifnull(total_maintenance, 0) as total_maintenance  FROM
+                            (SELECT vehicle_id, 
+                            min(create_date) as first_service,
+                            max(create_date) as last_service,
+                            count(*) as total_service
+                            FROM vehicle_maintenance 
+                            WHERE is_maintenance = 0 
+                            GROUP BY vehicle_id) as vs
+                            LEFT OUTER JOIN  
+                            (SELECT vehicle_id, 
+                            min(create_date) as first_maintenance,
+                            max(create_date) as last_maintenance,
+                            count(*) as total_maintenance
+                            FROM vehicle_maintenance 
+                            WHERE is_maintenance = 1 
+                            GROUP BY vehicle_id) as vm
+                            ON vm.vehicle_id = vs.vehicle_id
+                        """
+        self.execute_script(sql_script) 
+    '''  
+    def execute_view_script(self, sql_script):
+        try:
+            c = self.con.cursor()
+            c.execute(sql_script)
+            c.close
+        except Exception as e:
+            sys.exit(f"Error creating view {self.view_name}: " + e)
            
     def display_table(self):
         sql_script = f"""SELECT * FROM {self.table_name}"""

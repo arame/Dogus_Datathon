@@ -10,3 +10,6 @@ node_modules
 *.gif
 *.png
 *.db
+*.sqbpro
+sql/
+output_file/
