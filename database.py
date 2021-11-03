@@ -23,6 +23,13 @@ class Data:
             :param:
             :return:
         """
+        '''
+        sqlite3.PARSE_DECLTYPES: The sqlite3 module parses the declared type for each column it returns 
+            then uses the type converters dictionary to execute the converter function registered for that type there.
+
+        sqlite3.PARSE_COLNAMES: The SQLite interface parses the column name for each column it returns. 
+            It will use the converters dictionary and then use the converter function found there to return the value.
+        '''
         self.con = None
         try:
             self.con = lite.connect(self.db, detect_types=lite.PARSE_DECLTYPES | lite.PARSE_COLNAMES)
@@ -40,10 +47,11 @@ class Data:
         self.df_vehicles = self.read_file(Hyper.vehicle_file, Hyper.vehicle_columns, "vehicles")  
         self.df_vehicle_maintenance = self.read_file(Hyper.vehicle_maintenance_file, Hyper.vehicle_maintenance_columns, "vehicle maintenace")     
         if Hyper.IsStartAgain:
-            self.delete_all_tables_and_views()
-                
-        self.create_all_tables()
-        #self.create_all_views()
+            self.delete_all_tables()
+            self.create_all_tables()
+             
+
+        
 
     def read_file(self, file, columns, file_name):
         try:
@@ -55,10 +63,12 @@ class Data:
             sys.exit(f"Error with reading the file {file_name}: {e}")
            
           
-    def delete_all_tables_and_views(self):
+    def delete_all_tables(self):
         tables = self.get_tables()
         self.delete_tables(tables)
         Helper.printline("Deleted all tables")
+        
+    def delete_all_views(self):
         views = self.get_views()
         self.delete_views(views)
         Helper.printline("Deleted all views")
@@ -98,7 +108,7 @@ class Data:
         self.create_customer_sales_table() 
         self.create_vehicle_table()
         self.create_vehicle_maintenance_orig_table() 
-        self.create_vehicle_maintenance_table()    
+        #self.create_vehicle_maintenance_table()    
 
     def create_customers_table(self):
         self.table_name = "customers"        
@@ -319,60 +329,110 @@ class Data:
         except Exception as e:
             sys.exit(f"{error_message}: {e}")
     
-    ''' def create_all_views(self):
-        self.create_vehicle_mainenance_view() '''
-    '''         
+    def create_all_views(self):
+        self.create_customer_history_view()
+        self.create_sales_file_view()
+        self.create_vehicle_view()
+        self.create_vehicle_maintenance_orig_view()
+        self.create_vehicle_mainenance_view() 
+        
+    def create_customer_history_view(self):
+        self.view_name = "vw_customer_history"
+        sql_script = f''' CREATE VIEW IF NOT EXISTS {self.view_name} AS
+                            SELECT 
+                            base_customer_id,
+                            vehicle_id,
+                            start_date,
+                            CASE WHEN end_date <= date('{Hyper.End_Date_Period}') THEN end_date ELSE NULL END AS end_date,
+                            status_id,
+                            status_explanation 
+                            FROM customer_history
+                            WHERE start_date <= date('{Hyper.End_Date_Period}')
+                        '''
+        self.execute_view_script(sql_script)
+        
+    def create_sales_file_view(self):
+        self.view_name = "vw_sales_file"
+        sql_script = f''' CREATE VIEW IF NOT EXISTS {self.view_name} AS
+                            SELECT * FROM sales_file
+                            WHERE sales_file_create_date <= date('{Hyper.End_Date_Period}')
+                        '''
+        self.execute_view_script(sql_script)
+        
+    def create_vehicle_view(self):
+        self.view_name = "vw_vehicle"
+        sql_script = f''' CREATE VIEW IF NOT EXISTS {self.view_name} AS
+                            SELECT * FROM vehicle
+                            WHERE traffic_date <= date('{Hyper.End_Date_Period}')
+                        '''
+        self.execute_view_script(sql_script)
+
+    def create_vehicle_maintenance_orig_view(self):
+        self.view_name = "vw_vehicle_maintenance_orig"
+        sql_script = f''' CREATE VIEW IF NOT EXISTS {self.view_name} AS
+                            SELECT * FROM vehicle_maintenance_orig
+                            WHERE create_date <= date('{Hyper.End_Date_Period}')
+                        '''
+        self.execute_view_script(sql_script)
+                                
     def create_vehicle_mainenance_view(self):
         self.view_name = "vw_vehicle_maintenance"
+        view_used = "vw_vehicle_maintenance_orig"
         sql_script = f""" CREATE VIEW IF NOT EXISTS {self.view_name} AS
-                            SELECT vm.vehicle_id, 
-                            first_service, last_service, ifnull(total_service, 0) as total_service, 
-                            first_maintenance, last_maintenance, ifnull(total_maintenance, 0) as total_maintenance  
+                            SELECT M.vehicle_id, 
+                            first_service, last_service, IFNULL(total_service, 0) AS total_service, IFNULL(full_amount_service, 0) as full_amount_service, 
+                            first_maintenance, last_maintenance, IFNULL(total_maintenance, 0) as total_service, IFNULL(full_amount_maintenance, 0) as full_amount_maintenance 
                             FROM
-                            (SELECT vehicle_id, 
+                            (SELECT vehicle_id,
                             min(create_date) as first_maintenance,
                             max(create_date) as last_maintenance,
-                            count(*) as total_maintenance
-                            FROM vehicle_maintenance 
-                            WHERE is_maintenance = 1 
-                            GROUP BY vehicle_id) as vm
-                            LEFT OUTER JOIN  
-                            (SELECT vehicle_id, 
+                            count(*) as total_maintenance,
+                            sum(total_amount) as full_amount_maintenance
+                            FROM {view_used}
+                            WHERE is_maintenance = 1
+                            GROUP BY vehicle_id) AS M
+                            LEFT OUTER JOIN 
+                            (SELECT vehicle_id,
                             min(create_date) as first_service,
                             max(create_date) as last_service,
-                            count(*) as total_service
-                            FROM vehicle_maintenance 
-                            WHERE is_maintenance = 0 
-                            GROUP BY vehicle_id) as vs
-                            ON vm.vehicle_id = vs.vehicle_id
-                            UNION  
-                            SELECT vs.vehicle_id, 
-                            first_service, last_service, ifnull(total_service, 0) as total_service, 
-                            first_maintenance, last_maintenance, ifnull(total_maintenance, 0) as total_maintenance  FROM
-                            (SELECT vehicle_id, 
+                            count(*) as total_service,
+                            sum(total_amount) as full_amount_service
+                            FROM {view_used}
+                            WHERE is_maintenance = 0
+                            GROUP BY vehicle_id) AS S
+                            ON M.vehicle_id = S.vehicle_id
+                            UNION
+                            SELECT S.vehicle_id, 
+                            first_service, last_service, IFNULL(total_service, 0) AS total_service, IFNULL(full_amount_service, 0) as full_amount_service, 
+                            first_maintenance, last_maintenance, IFNULL(total_maintenance, 0) as total_service, IFNULL(full_amount_maintenance, 0) as full_amount_maintenance 
+                            FROM
+                            (SELECT vehicle_id,
                             min(create_date) as first_service,
                             max(create_date) as last_service,
-                            count(*) as total_service
-                            FROM vehicle_maintenance 
-                            WHERE is_maintenance = 0 
-                            GROUP BY vehicle_id) as vs
-                            LEFT OUTER JOIN  
-                            (SELECT vehicle_id, 
+                            count(*) as total_service,
+                            sum(total_amount) as full_amount_service
+                            FROM {view_used}
+                            WHERE is_maintenance = 0
+                            GROUP BY vehicle_id) AS S
+                            LEFT OUTER JOIN 
+                            (SELECT vehicle_id,
                             min(create_date) as first_maintenance,
                             max(create_date) as last_maintenance,
-                            count(*) as total_maintenance
-                            FROM vehicle_maintenance 
-                            WHERE is_maintenance = 1 
-                            GROUP BY vehicle_id) as vm
-                            ON vm.vehicle_id = vs.vehicle_id
+                            count(*) as total_maintenance,
+                            sum(total_amount) as full_amount_maintenance
+                            FROM {view_used}
+                            WHERE is_maintenance = 1
+                            GROUP BY vehicle_id) AS M
+                            ON M.vehicle_id = S.vehicle_id
                         """
-        self.execute_script(sql_script) 
-    '''  
+        self.execute_view_script(sql_script) 
+   
     def execute_view_script(self, sql_script):
         try:
             c = self.con.cursor()
             c.execute(sql_script)
             c.close
+            Helper.printline(f"View successfully created: {self.view_name}")
         except Exception as e:
             sys.exit(f"Error creating view {self.view_name}: " + e)
            

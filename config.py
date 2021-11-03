@@ -1,11 +1,11 @@
-
+import datetime
 class Hyper:
     db = "./sql/dogus_datathon.db"
     language = "en"
     create_schema = True
-    IsStartAgain = True
-    IsLoadCustomers = True
-    IsLoadSales = True
+    IsStartAgain = False
+    Start_Date_Period = datetime.date(2020, 6, 1)
+    End_Date_Period = datetime.date(2020, 8, 31)
     customer_file = "./files/FINAL_CUSTOMER_DATATHON.csv"
     customer_columns = ["base_customer_id", "customer_id", "gender", "gender_id", "marital_status", "marital_status_id", "birth_year", "city", "occupation"]
     customer_reorder_columns = ["customer_id", "base_customer_id", "gender", "gender_id", "marital_status", "marital_status_id", "birth_year", "city", "occupation"]
